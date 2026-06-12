@@ -1,0 +1,18 @@
+{{- if not .Values.storage.existingClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ printf "%s-data" (include "superagent.fullname" .) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "superagent.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.storage.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.size }}
+  {{- if .Values.storage.storageClassName }}
+  storageClassName: {{ .Values.storage.storageClassName | quote }}
+  {{- end }}
+{{- end }}

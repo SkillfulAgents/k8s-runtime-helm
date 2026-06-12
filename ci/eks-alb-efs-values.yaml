@@ -1,0 +1,38 @@
+# Reuse on AWS EKS: ALB ingress + EFS (RWX) storage. Fill in your own domain,
+# ALB group, ACM cert ARN, and EFS StorageClass.
+hostPublicUrl: https://superagent.example.com
+
+image:
+  hostApp:
+    repository: ghcr.io/skillfulagents/superagent
+  agentContainer:
+    repository: ghcr.io/skillfulagents/superagent-agent-container-base
+
+imagePullSecrets:
+  - name: ghcr-pull-secret
+
+storage:
+  # EFS / S3 Files CSI provides RWX. Either a dynamic efs-sc class or an
+  # existingClaim bound to a pre-provisioned PV.
+  storageClassName: efs-sc
+  accessMode: ReadWriteMany
+  size: 20Gi
+
+ingress:
+  enabled: true
+  className: alb
+  host: superagent.example.com
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/group.name: my-shared-alb-group
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-west-2:000000000000:certificate/EXAMPLE
+
+secrets:
+  existingSecret: host-app-env
+
+# RWX network volumes (EFS) ignore fsGroup; chown the data dir once on first boot.
+fixPerms:
+  enabled: true

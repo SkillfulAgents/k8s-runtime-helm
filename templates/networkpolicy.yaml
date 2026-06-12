@@ -1,0 +1,24 @@
+{{- if .Values.networkPolicy.enabled }}
+# Agent pods expose HTTP/WS with no inbound auth. Confine their ingress to the
+# host-app pod. Targets the runtime-owned labels SuperAgent stamps on every agent
+# pod (app.kubernetes.io/managed-by=superagent, component=agent).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-agent-ingress" (include "superagent.fullname" .) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "superagent.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: superagent
+      app.kubernetes.io/component: agent
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "superagent.selectorLabels" . | nindent 14 }}
+{{- end }}

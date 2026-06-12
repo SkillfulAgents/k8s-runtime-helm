@@ -1,0 +1,17 @@
+apiVersion: v2
+name: superagent
+description: Self-hosted single-tenant SuperAgent on Kubernetes (host-app + per-agent pods)
+type: application
+# Chart version is independent of the app version it deploys.
+version: 0.1.0
+# Default host-app/agent image tag when image.*.tag is unset.
+appVersion: "0.3.42"
+keywords:
+  - superagent
+  - ai-agent
+  - kubernetes
+home: https://github.com/SkillfulAgents/k8s-runtime-helm
+sources:
+  - https://github.com/SkillfulAgents/SuperAgent
+maintainers:
+  - name: SkillfulAgents

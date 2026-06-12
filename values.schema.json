@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "SuperAgent self-host chart values",
+  "type": "object",
+  "required": ["hostPublicUrl", "image", "storage", "hostApp", "agent"],
+  "properties": {
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "hostPublicUrl": {
+      "type": "string",
+      "description": "Externally reachable URL of the host-app (e.g. https://superagent.example.com). Empty default is rejected at install time by the chart's validate helper."
+    },
+    "image": {
+      "type": "object",
+      "required": ["hostApp", "agentContainer"],
+      "properties": {
+        "hostApp": {
+          "type": "object",
+          "required": ["repository"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          }
+        },
+        "agentContainer": {
+          "type": "object",
+          "required": ["repository"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string" }
+          }
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": { "name": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "properties": { "mode": { "type": "boolean" } }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "existingSecret": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "required": ["accessMode", "size"],
+      "properties": {
+        "existingClaim": { "type": "string" },
+        "subPath": { "type": "string" },
+        "subPathParent": { "type": "string" },
+        "storageClassName": { "type": "string" },
+        "accessMode": {
+          "type": "string",
+          "enum": ["ReadWriteOnce", "ReadWriteMany", "ReadWriteOncePod"]
+        },
+        "size": { "type": "string", "minLength": 1 }
+      }
+    },
+    "hostApp": {
+      "type": "object",
+      "required": ["replicas", "port"],
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 1, "maximum": 1 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "resources": { "type": "object" },
+        "settings": {
+          "type": "object",
+          "properties": { "llmProvider": { "type": "string" } }
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "required": ["resources", "workspacesSubPathPrefix"],
+      "properties": {
+        "resources": {
+          "type": "object",
+          "required": ["cpu", "memory"],
+          "properties": {
+            "cpu": { "type": ["number", "string"] },
+            "memory": { "type": "string", "minLength": 1 }
+          }
+        },
+        "workspacesSubPathPrefix": { "type": "string" },
+        "extraLabels": { "type": "object", "additionalProperties": { "type": "string" } },
+        "extraAnnotations": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "host": { "type": "string" },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "secretName": { "type": "string" }
+          }
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": { "name": { "type": "string" } }
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "properties": {
+        "runAsUser": { "type": "integer" },
+        "runAsGroup": { "type": "integer" },
+        "fsGroup": { "type": "integer" }
+      }
+    },
+    "fixPerms": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    }
+  }
+}

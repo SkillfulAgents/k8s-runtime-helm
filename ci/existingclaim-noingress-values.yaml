@@ -1,0 +1,14 @@
+# Bring-your-own PVC + no ingress (reach host-app via port-forward / own routing).
+hostPublicUrl: https://superagent.internal
+
+storage:
+  existingClaim: my-prebuilt-workspaces
+
+ingress:
+  enabled: false
+
+secrets:
+  existingSecret: superagent-secrets
+
+networkPolicy:
+  enabled: true

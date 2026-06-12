@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-template:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: helm lint (default + ci values)
+        run: |
+          set -euo pipefail
+          helm lint .
+          for f in ci/*-values.yaml; do
+            echo "== helm lint -f $f =="
+            helm lint . -f "$f"
+          done
+
+      - name: Install kubeconform
+        run: |
+          set -euo pipefail
+          VERSION=v0.6.7
+          curl -fsSLo kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar xzf kubeconform.tar.gz kubeconform
+          sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
+
+      - name: helm template + kubeconform
+        run: |
+          set -euo pipefail
+          for f in ci/*-values.yaml; do
+            echo "== helm template + kubeconform -f $f =="
+            helm template release . -f "$f" --namespace superagent \
+              | kubeconform -strict -summary -ignore-missing-schemas \
+                  -kubernetes-version 1.29.0
+          done

@@ -1,0 +1,37 @@
+SuperAgent is deploying to namespace "{{ .Release.Namespace }}".
+
+1. Wait for the host-app pod to become ready:
+     kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "superagent.fullname" . }}
+
+2. Open the app:
+{{- if .Values.ingress.enabled }}
+     {{ .Values.hostPublicUrl }}
+   (ensure DNS for "{{ include "superagent.ingressHost" . }}" points at your ingress controller)
+{{- else }}
+     kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "superagent.fullname" . }} 8080:{{ .Values.service.port }}
+     then visit http://localhost:8080
+{{- end }}
+
+3. Each agent runs as its own pod in this namespace:
+     kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/managed-by=superagent
+
+{{- if eq (.Values.storage.accessMode) "ReadWriteMany" }}
+{{- else }}
+
+WARNING: storage.accessMode is "{{ .Values.storage.accessMode }}". host-app and agent
+pods share this PVC; with ReadWriteOnce they must schedule on the SAME node or agents
+will fail to mount. Use ReadWriteMany on multi-node clusters.
+{{- end }}
+{{- if not .Values.secrets.existingSecret }}
+{{- if not .Values.secrets.env }}
+
+WARNING: no provider keys set. Set secrets.env (e.g. ANTHROPIC_API_KEY) or
+secrets.existingSecret, or the agent will have no LLM credentials.
+{{- end }}
+{{- if .Values.auth.mode }}
+
+NOTE: auth.mode is true (multi-user). Sign up with email/password — the first
+user becomes admin. Requires a clean data dir on first boot. Add
+AUTH_PROVIDERS_JSON to secrets.env if you also want OIDC/social login.
+{{- end }}
+{{- end }}

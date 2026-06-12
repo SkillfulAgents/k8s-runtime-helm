@@ -1,0 +1,22 @@
+# Typical self-host: nginx ingress + dynamically-provisioned RWX PVC.
+hostPublicUrl: https://superagent.example.com
+
+storage:
+  storageClassName: nfs-client
+  accessMode: ReadWriteMany
+  size: 20Gi
+
+ingress:
+  enabled: true
+  className: nginx
+  host: superagent.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  tls:
+    enabled: true
+    secretName: superagent-tls
+
+secrets:
+  env:
+    ANTHROPIC_API_KEY: sk-ant-example

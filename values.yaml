@@ -1,0 +1,124 @@
+## SuperAgent self-host (single-tenant) values.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  hostApp:
+    repository: ghcr.io/skillfulagents/superagent
+    # Pinned to a build that ships the Kubernetes runtime + AUTH_MODE. Once the
+    # runtime lands in a tagged SuperAgent release, point this at that release
+    # tag (or set "" to track .Chart.appVersion).
+    tag: k8s-runtime-a7417194-auth
+    pullPolicy: IfNotPresent
+  agentContainer:
+    repository: ghcr.io/skillfulagents/superagent-agent-container-base
+    # Empty tracks .Chart.appVersion.
+    tag: ""
+
+# Pull secrets for private registries. Public images need none.
+# e.g. [{ name: ghcr-pull-secret }]
+imagePullSecrets: []
+
+# REQUIRED. Externally reachable URL of the host-app. Used for agent->host
+# callbacks (HOST_PUBLIC_URL) and OAuth redirect origins. e.g. https://superagent.example.com
+hostPublicUrl: ""
+
+auth:
+  # Multi-user deployment with login (Better Auth). Out of the box this uses
+  # email/password local auth — the first user to sign up becomes admin; no OIDC
+  # required. To add OIDC/social login, set AUTH_PROVIDERS_JSON in secrets.env.
+  # Enabling auth requires a CLEAN data dir on first boot. false = single-user.
+  mode: true
+
+# Secrets injected into the host-app as env (envFrom). Put your provider keys here,
+# e.g. env: { ANTHROPIC_API_KEY: "sk-ant-..." }. Optionally add AUTH_PROVIDERS_JSON
+# (a JSON array of OIDC providers) to enable social login alongside local auth.
+# To use a pre-created Secret instead, set existingSecret and leave env empty.
+secrets:
+  existingSecret: ""
+  env: {}
+
+storage:
+  # Bring-your-own PVC. When set, the chart skips creating a PVC and mounts this
+  # existing claim (storageClassName/accessMode/size below are then ignored).
+  existingClaim: ""
+  # Optional subPath mounted as /superagent-data. Leave empty for a dedicated PVC.
+  # Set this when multiple installs share one backing filesystem.
+  subPath: ""
+  # Optional existing parent subPath. When set with storage.subPath, an init
+  # container mounts this parent and creates the nested storage.subPath first.
+  subPathParent: ""
+  # RWX is required when host-app and agent pods land on different nodes. On a
+  # single-node cluster ReadWriteOnce works. "" uses the cluster default StorageClass.
+  storageClassName: ""
+  accessMode: ReadWriteMany
+  size: 20Gi
+
+hostApp:
+  # MUST be 1: host-app is a single-writer (SQLite on a shared PVC). The chart
+  # refuses to render with replicas > 1.
+  replicas: 1
+  port: 47891
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  # Seeded into settings.json on FIRST boot only (host-app persists its own after).
+  settings:
+    llmProvider: anthropic
+
+agent:
+  # Per-agent pod resources (translated to k8s requests==limits, Guaranteed QoS).
+  resources:
+    cpu: 1
+    memory: 2Gi
+  # subPath under the workspaces PVC. Keep "agents" so host-app and agent pods
+  # resolve the same workspace files (host-app writes <dataDir>/agents/<id>/workspace).
+  workspacesSubPathPrefix: "agents"
+  # Opaque labels/annotations stamped on every agent pod & service. Self-host
+  # rarely needs these; they exist for external selectors (NetworkPolicy/controllers).
+  extraLabels: {}
+  extraAnnotations: {}
+
+service:
+  type: ClusterIP
+  port: 80
+
+# Optional example Ingress, off by default. host-app is reachable via
+# `kubectl port-forward` or a LoadBalancer Service without it. If you'd like the
+# chart to create an Ingress, enable it and fill in the class + annotations + TLS
+# that match your ingress controller (ALB, nginx, Traefik, Gateway API, …).
+ingress:
+  enabled: false
+  # Your ingress controller's class, e.g. alb / nginx / traefik.
+  className: ""
+  # Defaults to the host parsed from hostPublicUrl when empty.
+  host: ""
+  # Provider-specific annotations (e.g. alb.ingress.kubernetes.io/* for AWS ALB).
+  annotations: {}
+  tls:
+    enabled: false
+    secretName: ""
+
+# Confine agent pod ingress to the host-app pod (agent HTTP/WS has no inbound auth).
+networkPolicy:
+  enabled: true
+
+serviceAccount:
+  # Defaults to the chart fullname when empty.
+  name: ""
+
+# Pod-level security context for the host-app. uid/gid 1000 matches the image USER.
+podSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+# One-time chown of the data dir to uid 1000 via an init container. Needed for
+# StorageClasses that don't honor fsGroup; harmless (skips via marker) otherwise.
+fixPerms:
+  enabled: true

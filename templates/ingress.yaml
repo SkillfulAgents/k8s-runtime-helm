@@ -1,0 +1,40 @@
+{{- if .Values.ingress.enabled }}
+{{- $host := include "superagent.ingressHost" . -}}
+{{- if not $host }}
+{{- fail "ingress.enabled is true but no host could be derived; set ingress.host or hostPublicUrl" -}}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "superagent.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "superagent.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+      {{- if .Values.ingress.tls.secretName }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+      {{- end }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "superagent.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

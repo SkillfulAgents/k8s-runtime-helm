@@ -1,0 +1,202 @@
+{{- include "superagent.validate" . -}}
+{{- $dataDir := "/superagent-data" -}}
+{{- $agentImage := printf "%s:%s" .Values.image.agentContainer.repository (.Values.image.agentContainer.tag | default .Chart.AppVersion) -}}
+{{- $storageSubPath := .Values.storage.subPath -}}
+{{- $storageSubPathParent := .Values.storage.subPathParent -}}
+{{- $relativeStorageSubPath := "" -}}
+{{- if and $storageSubPath $storageSubPathParent -}}
+{{- $relativeStorageSubPath = trimPrefix "/" (trimPrefix $storageSubPathParent $storageSubPath) -}}
+{{- end -}}
+{{- $seedSettings := dict
+      "llmProvider" .Values.hostApp.settings.llmProvider
+      "container" (dict "containerRunner" "kubernetes" "resourceLimits" (dict "cpu" .Values.agent.resources.cpu "memory" .Values.agent.resources.memory))
+      "auth" (dict "trustedOrigins" (list .Values.hostPublicUrl)) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "superagent.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "superagent.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.hostApp.replicas }}
+  # Single-writer SQLite: never roll a second pod alongside the old one.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "superagent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "superagent.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "superagent.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.podSecurityContext.runAsUser }}
+        runAsGroup: {{ .Values.podSecurityContext.runAsGroup }}
+        fsGroup: {{ .Values.podSecurityContext.fsGroup }}
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- if and $storageSubPath $storageSubPathParent }}
+        - name: prepare-subpath
+          image: busybox:1.36
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+          command: ["sh", "-c"]
+          args:
+            - |
+              mkdir -p /data/{{ $relativeStorageSubPath | quote }}/agents
+              chown -R {{ .Values.podSecurityContext.runAsUser }}:{{ .Values.podSecurityContext.fsGroup }} /data/{{ $relativeStorageSubPath | quote }} || true
+              chmod -R a+rwX /data/{{ $relativeStorageSubPath | quote }} || true
+          volumeMounts:
+            - name: data
+              mountPath: /data
+              subPath: {{ $storageSubPathParent | quote }}
+        {{- end }}
+        {{- if .Values.fixPerms.enabled }}
+        - name: fix-perms
+          image: busybox:1.36
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+          command: ["sh", "-c"]
+          args:
+            - |
+              if [ ! -f {{ $dataDir }}/.perms-fixed ]; then
+                chown -R {{ .Values.podSecurityContext.runAsUser }}:{{ .Values.podSecurityContext.fsGroup }} {{ $dataDir }} || true
+                chmod -R a+rwX {{ $dataDir }} || true
+                touch {{ $dataDir }}/.perms-fixed || true
+              fi
+          volumeMounts:
+            - name: data
+              mountPath: {{ $dataDir }}
+              {{- if $storageSubPath }}
+              subPath: {{ $storageSubPath | quote }}
+              {{- end }}
+        {{- end }}
+        - name: seed-settings
+          image: busybox:1.36
+          securityContext:
+            runAsUser: {{ .Values.podSecurityContext.runAsUser }}
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          command: ["sh", "-c"]
+          args:
+            - |
+              # Seed defaults only on first provision; host-app persists its own
+              # settings.json on every boot, so re-seeding would reset user changes.
+              if [ ! -f {{ $dataDir }}/settings.json ]; then
+                printf '%s' '{{ $seedSettings | toJson }}' > {{ $dataDir }}/settings.json
+              fi
+              mkdir -p {{ $dataDir }}/agents
+          volumeMounts:
+            - name: data
+              mountPath: {{ $dataDir }}
+              {{- if $storageSubPath }}
+              subPath: {{ $storageSubPath | quote }}
+              {{- end }}
+      containers:
+        - name: host-app
+          image: "{{ .Values.image.hostApp.repository }}:{{ .Values.image.hostApp.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.hostApp.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.hostApp.port }}
+          envFrom:
+            - secretRef:
+                name: {{ include "superagent.secretName" . }}
+          env:
+            # Keep the app's listen port in sync with containerPort/probes.
+            - name: PORT
+              value: {{ .Values.hostApp.port | quote }}
+            - name: AUTH_MODE
+              value: {{ .Values.auth.mode | quote }}
+            - name: SUPERAGENT_DATA_DIR
+              value: {{ $dataDir | quote }}
+            - name: HOST_PUBLIC_URL
+              value: {{ .Values.hostPublicUrl | quote }}
+            - name: TRUSTED_ORIGINS
+              value: {{ .Values.hostPublicUrl | quote }}
+            - name: K8S_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: K8S_WORKSPACES_PVC
+              value: {{ include "superagent.pvcName" . | quote }}
+            - name: K8S_WORKSPACES_SUBPATH_PREFIX
+              value: {{ .Values.agent.workspacesSubPathPrefix | quote }}
+            - name: K8S_AGENT_IMAGE
+              value: {{ $agentImage | quote }}
+            # host-app's own pod name, so the runtime can set ownerReferences on
+            # agent pods/services for cluster GC when host-app dies.
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if .Values.imagePullSecrets }}
+            - name: K8S_IMAGE_PULL_SECRET_NAME
+              value: {{ (index .Values.imagePullSecrets 0).name | quote }}
+            {{- end }}
+            {{- if .Values.agent.extraLabels }}
+            - name: K8S_EXTRA_LABELS
+              value: {{ .Values.agent.extraLabels | toJson | quote }}
+            {{- end }}
+            {{- if .Values.agent.extraAnnotations }}
+            - name: K8S_EXTRA_ANNOTATIONS
+              value: {{ .Values.agent.extraAnnotations | toJson | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ $dataDir }}
+              {{- if $storageSubPath }}
+              subPath: {{ $storageSubPath | quote }}
+              {{- end }}
+          resources:
+            {{- toYaml .Values.hostApp.resources | nindent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "superagent.pvcName" . }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "superagent.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "superagent.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "superagent.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
