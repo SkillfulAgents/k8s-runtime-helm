@@ -6,10 +6,10 @@ fullnameOverride: ""
 image:
   hostApp:
     repository: ghcr.io/skillfulagents/superagent
-    # Pinned to a build that ships the Kubernetes runtime + AUTH_MODE. Once the
-    # runtime lands in a tagged SuperAgent release, point this at that release
-    # tag (or set "" to track .Chart.appVersion).
-    tag: k8s-runtime-a7417194-auth
+    # Auth-compiled host-app build. The Kubernetes runtime ships from v0.3.45 on;
+    # auth.mode defaults to true, which requires the "-auth" image (AUTH_MODE=true
+    # baked in), so this can't be left "" to track the non-auth .Chart.appVersion.
+    tag: 0.3.45-auth
     pullPolicy: IfNotPresent
   agentContainer:
     repository: ghcr.io/skillfulagents/superagent-agent-container-base
