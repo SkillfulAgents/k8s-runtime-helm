@@ -5,7 +5,7 @@ type: application
 # Chart version is independent of the app version it deploys.
 version: 0.1.0
 # Default host-app/agent image tag when image.*.tag is unset.
-appVersion: "0.3.42"
+appVersion: "0.3.45"
 keywords:
   - superagent
   - ai-agent
