@@ -12,6 +12,6 @@ keywords:
   - kubernetes
 home: https://github.com/SkillfulAgents/k8s-runtime-helm
 sources:
-  - https://github.com/SkillfulAgents/SuperAgent
+  - https://github.com/SkillfulAgents/Gamut
 maintainers:
   - name: SkillfulAgents
