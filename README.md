@@ -1,6 +1,6 @@
 # SuperAgent Helm Chart
 
-Self-host a single-tenant [SuperAgent](https://github.com/SkillfulAgents/SuperAgent)
+Self-host a single-tenant [SuperAgent](https://github.com/SkillfulAgents/Gamut)
 on your own Kubernetes cluster. The chart deploys one long-lived **host-app** pod
 that orchestrates **per-agent pods** via the in-cluster Kubernetes API.
 
